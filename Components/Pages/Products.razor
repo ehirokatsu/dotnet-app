@@ -7,7 +7,7 @@
 
 <p>商品の一覧を管理します。</p>
 
-<button class="btn btn-primary mb-3" @onclick="ShowForm">
+<button class="btn btn-primary mb-3" @onclick="ShowNewForm">
     新規商品登録
 </button>
 
@@ -15,7 +15,7 @@
 {
     <div class="card mb-4">
         <div class="card-body">
-            <h3>商品登録</h3>
+            <h3>@(editingProduct is null ? "商品登録" : "商品編集")</h3>
 
             @if (!string.IsNullOrEmpty(errorMessage))
             {
@@ -37,8 +37,8 @@
                 <input type="number" class="form-control" @bind="newPrice" />
             </div>
 
-            <button class="btn btn-success me-2" @onclick="AddProduct">
-                登録
+            <button class="btn btn-success me-2" @onclick="SaveProduct">
+                @(editingProduct is null ? "登録" : "更新")
             </button>
             <button class="btn btn-secondary" @onclick="CloseForm">
                 キャンセル
@@ -64,6 +64,10 @@
                 <td>@product.Name</td>
                 <td>@product.Price.ToString("N0") 円</td>
                 <td>
+                    <button class="btn btn-outline-primary btn-sm me-2"
+                            @onclick="() => EditProduct(product)">
+                        編集
+                    </button>
                     <button class="btn btn-danger btn-sm"
                             @onclick="() => DeleteProduct(product)">
                         削除
@@ -82,24 +86,40 @@
     ];
 
     private bool showForm;
+    private Product? editingProduct;
     private string newProductCode = "";
     private string newProductName = "";
     private decimal newPrice;
     private string errorMessage = "";
 
-    private void ShowForm()
+    private void ShowNewForm()
     {
-        showForm = true;
+        editingProduct = null;
+        newProductCode = "";
+        newProductName = "";
+        newPrice = 0;
         errorMessage = "";
+        showForm = true;
+    }
+
+    private void EditProduct(Product product)
+    {
+        editingProduct = product;
+        newProductCode = product.Code;
+        newProductName = product.Name;
+        newPrice = product.Price;
+        errorMessage = "";
+        showForm = true;
     }
 
     private void CloseForm()
     {
         showForm = false;
+        editingProduct = null;
         errorMessage = "";
     }
 
-    private void AddProduct()
+    private void SaveProduct()
     {
         if (string.IsNullOrWhiteSpace(newProductCode) ||
             string.IsNullOrWhiteSpace(newProductName) ||
@@ -109,18 +129,25 @@
             return;
         }
 
-        products.Add(new Product(newProductCode, newProductName, newPrice));
+        var savedProduct = new Product(newProductCode, newProductName, newPrice);
 
-        newProductCode = "";
-        newProductName = "";
-        newPrice = 0;
-        showForm = false;
+        if (editingProduct is null)
+        {
+            products.Add(savedProduct);
+        }
+        else
+        {
+            var index = products.IndexOf(editingProduct);
+            products[index] = savedProduct;
+        }
+
+        CloseForm();
     }
-
-    private record Product(string Code, string Name, decimal Price);
 
     private void DeleteProduct(Product product)
     {
         products.Remove(product);
     }
+
+    private record Product(string Code, string Name, decimal Price);
 }
