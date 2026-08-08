@@ -1,4 +1,5 @@
 @page "/products"
+@rendermode InteractiveServer
 
 <PageTitle>商品管理 | OMMS</PageTitle>
 
@@ -6,7 +7,45 @@
 
 <p>商品の一覧を管理します。</p>
 
-<button class="btn btn-primary mb-3">新規商品登録</button>
+<button class="btn btn-primary mb-3" @onclick="ShowForm">
+    新規商品登録
+</button>
+
+@if (showForm)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h3>商品登録</h3>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger">@errorMessage</div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label">商品コード</label>
+                <input class="form-control" @bind="newProductCode" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">商品名</label>
+                <input class="form-control" @bind="newProductName" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">価格</label>
+                <input type="number" class="form-control" @bind="newPrice" />
+            </div>
+
+            <button class="btn btn-success me-2" @onclick="AddProduct">
+                登録
+            </button>
+            <button class="btn btn-secondary" @onclick="CloseForm">
+                キャンセル
+            </button>
+        </div>
+    </div>
+}
 
 <table class="table table-striped">
     <thead>
@@ -17,15 +56,59 @@
         </tr>
     </thead>
     <tbody>
-        <tr>
-            <td>P001</td>
-            <td>サンプル商品A</td>
-            <td>1,000円</td>
-        </tr>
-        <tr>
-            <td>P002</td>
-            <td>サンプル商品B</td>
-            <td>2,500円</td>
-        </tr>
+        @foreach (var product in products)
+        {
+            <tr>
+                <td>@product.Code</td>
+                <td>@product.Name</td>
+                <td>@product.Price.ToString("N0") 円</td>
+            </tr>
+        }
     </tbody>
 </table>
+
+@code {
+    private readonly List<Product> products =
+    [
+        new("P001", "サンプル商品A", 1000),
+        new("P002", "サンプル商品B", 2500)
+    ];
+
+    private bool showForm;
+    private string newProductCode = "";
+    private string newProductName = "";
+    private decimal newPrice;
+    private string errorMessage = "";
+
+    private void ShowForm()
+    {
+        showForm = true;
+        errorMessage = "";
+    }
+
+    private void CloseForm()
+    {
+        showForm = false;
+        errorMessage = "";
+    }
+
+    private void AddProduct()
+    {
+        if (string.IsNullOrWhiteSpace(newProductCode) ||
+            string.IsNullOrWhiteSpace(newProductName) ||
+            newPrice <= 0)
+        {
+            errorMessage = "商品コード・商品名・0より大きい価格を入力してください。";
+            return;
+        }
+
+        products.Add(new Product(newProductCode, newProductName, newPrice));
+
+        newProductCode = "";
+        newProductName = "";
+        newPrice = 0;
+        showForm = false;
+    }
+
+    private record Product(string Code, string Name, decimal Price);
+}
