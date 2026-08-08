@@ -53,6 +53,7 @@
             <th>商品コード</th>
             <th>商品名</th>
             <th>価格</th>
+            <th>操作</th>
         </tr>
     </thead>
     <tbody>
@@ -62,6 +63,12 @@
                 <td>@product.Code</td>
                 <td>@product.Name</td>
                 <td>@product.Price.ToString("N0") 円</td>
+                <td>
+                    <button class="btn btn-danger btn-sm"
+                            @onclick="() => DeleteProduct(product)">
+                        削除
+                    </button>
+                </td>
             </tr>
         }
     </tbody>
@@ -111,4 +118,9 @@
     }
 
     private record Product(string Code, string Name, decimal Price);
+
+    private void DeleteProduct(Product product)
+    {
+        products.Remove(product);
+    }
 }
