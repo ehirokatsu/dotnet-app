@@ -1,0 +1,165 @@
+@page "/users"
+@rendermode InteractiveServer
+@using OMMS.Models
+@inject OMMS.Db.dao.UserDao UserDao
+
+<PageTitle>ユーザ管理 | OMMS</PageTitle>
+
+<h1>ユーザ管理</h1>
+
+<p>ユーザの一覧を管理します。</p>
+
+<button class="btn btn-primary mb-3" @onclick="ShowNewForm">
+    新規ユーザ登録
+</button>
+
+@if (showForm)
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <h3>@(editingUser is null ? "ユーザ登録" : "ユーザ編集")</h3>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger">@errorMessage</div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label">ユーザID</label>
+                <input class="form-control" @bind="newUserId" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">氏名</label>
+                <input class="form-control" @bind="newName" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">メールアドレス</label>
+                <input type="email" class="form-control" @bind="newEmail" />
+            </div>
+
+            <button class="btn btn-success me-2" @onclick="SaveUserAsync">
+                @(editingUser is null ? "登録" : "更新")
+            </button>
+            <button class="btn btn-secondary" @onclick="CloseForm">
+                キャンセル
+            </button>
+        </div>
+    </div>
+}
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>ユーザID</th>
+            <th>氏名</th>
+            <th>メールアドレス</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var user in users)
+        {
+            <tr>
+                <td>@user.UserId</td>
+                <td>@user.Name</td>
+                <td>@user.Email</td>
+                <td>
+                    <button class="btn btn-outline-primary btn-sm me-2"
+                            @onclick="() => EditUser(user)">
+                        編集
+                    </button>
+                    <button class="btn btn-danger btn-sm"
+                            @onclick="() => DeleteUserAsync(user.Id)">
+                        削除
+                    </button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<UserBean> users = new();
+    private bool showForm;
+    private UserBean? editingUser;
+    private string newUserId = "";
+    private string newName = "";
+    private string newEmail = "";
+    private string errorMessage = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        users = await UserDao.GetAllAsync();
+    }
+
+    private void ShowNewForm()
+    {
+        editingUser = null;
+        newUserId = "";
+        newName = "";
+        newEmail = "";
+        errorMessage = "";
+        showForm = true;
+    }
+
+    private void EditUser(UserBean user)
+    {
+        editingUser = user;
+        newUserId = user.UserId;
+        newName = user.Name;
+        newEmail = user.Email;
+        errorMessage = "";
+        showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        showForm = false;
+        editingUser = null;
+        errorMessage = "";
+    }
+
+    private async Task SaveUserAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newUserId) ||
+            string.IsNullOrWhiteSpace(newName) ||
+            string.IsNullOrWhiteSpace(newEmail))
+        {
+            errorMessage = "ユーザID・氏名・メールアドレスを入力してください。";
+            return;
+        }
+
+        var user = new UserBean
+        {
+            UserId = newUserId,
+            Name = newName,
+            Email = newEmail
+        };
+
+        if (editingUser is null)
+        {
+            await UserDao.AddAsync(user);
+        }
+        else
+        {
+            user.Id = editingUser.Id;
+            await UserDao.UpdateAsync(user);
+        }
+
+        CloseForm();
+        await LoadUsersAsync();
+    }
+
+    private async Task DeleteUserAsync(int id)
+    {
+        await UserDao.DeleteAsync(id);
+        await LoadUsersAsync();
+    }
+}

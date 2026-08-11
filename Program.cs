@@ -10,9 +10,16 @@ builder.Services.AddRazorComponents()
 
 // ProductDao の登録
 builder.Services.AddTransient<ProductDao>();
+builder.Services.AddTransient<UserDao>();
 builder.Services.AddTransient<AIService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var userDao = scope.ServiceProvider.GetRequiredService<UserDao>();
+    await userDao.EnsureTableAsync();
+}
 
 // 2. HTTPリクエストパイプラインの設定
 if (!app.Environment.IsDevelopment())
