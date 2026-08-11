@@ -1,0 +1,54 @@
+@page "/ai-analysis"
+@rendermode InteractiveServer
+@using OMMS.Services
+@inject AIService AIService
+
+<PageTitle>AIテキスト解析 | OMMS</PageTitle>
+
+<h1>AIテキスト解析</h1>
+<p>テキストを入力して「解析実行」を押してください。</p>
+
+<div class="mb-3">
+    <textarea class="form-control" rows="4" @bind="inputText" placeholder="解析したいテキストを入力..."></textarea>
+</div>
+
+<button class="btn btn-primary mb-4" @onclick="AnalyzeAsync" disabled="@isLoading">
+    @if (isLoading)
+    {
+        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+        <span>解析中...</span>
+    }
+    else
+    {
+        <span>解析実行</span>
+    }
+</button>
+
+@if (!string.IsNullOrEmpty(resultText))
+{
+    <div class="card">
+        <div class="card-header font-weight-bold">解析結果</div>
+        <div class="card-body">
+            <p style="white-space: pre-wrap;">@resultText</p>
+        </div>
+    </div>
+}
+
+@code {
+    private string inputText = "";
+    private string resultText = "";
+    private bool isLoading;
+
+    private async Task AnalyzeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(inputText)) return;
+
+        isLoading = true;
+        resultText = "";
+
+        // Service層経由でAI解析を呼び出し
+        resultText = await AIService.AnalyzeTextAsync(inputText);
+
+        isLoading = false;
+    }
+}

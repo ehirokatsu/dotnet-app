@@ -1,5 +1,6 @@
 using OMMS.Components;
 using OMMS.Db.dao;
+using OMMS.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +10,7 @@ builder.Services.AddRazorComponents()
 
 // ProductDao の登録
 builder.Services.AddTransient<ProductDao>();
+builder.Services.AddTransient<AIService>();
 
 var app = builder.Build();
 
