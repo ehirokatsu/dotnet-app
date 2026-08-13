@@ -11,7 +11,7 @@ builder.Services.AddRazorComponents()
 // ProductDao の登録
 builder.Services.AddTransient<ProductDao>();
 builder.Services.AddTransient<UserDao>();
-builder.Services.AddTransient<AIService>();
+builder.Services.AddHttpClient<AIService>();
 
 var app = builder.Build();
 
