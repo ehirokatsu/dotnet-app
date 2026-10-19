@@ -7,7 +7,7 @@ public class AIService(HttpClient httpClient, IConfiguration configuration)
 {
     private const string ApiBaseUrl = "https://generativelanguage.googleapis.com/v1beta/models";
     private readonly string _apiKey = configuration["Gemini:ApiKey"] ?? string.Empty;
-    private readonly string _model = configuration["Gemini:Model"] ?? "gemini-3.5-flash";
+    private readonly string _model = configuration["Gemini:Model"] ?? "gemini-3.6-flash";
 
     public async Task<string> AnalyzeTextAsync(string inputText)
     {

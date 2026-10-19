@@ -1,0 +1,256 @@
+@page "/gemini-chat"
+@page "/gemini-chat/{ConversationId:guid}"
+@page "/ai-analysis"
+@rendermode InteractiveServer
+@using OMMS.Db.dao
+@using OMMS.Models
+@using OMMS.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject GeminiChatService GeminiChatService
+@inject GeminiConversationDao ConversationDao
+@inject NavigationManager Navigation
+
+<PageTitle>Geminiチャット | OMMS</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Geminiチャット</h1>
+        <p class="mb-0 text-body-secondary">会話履歴は最終更新から3日間保存されます。</p>
+    </div>
+    <div>
+        <a class="btn btn-outline-secondary me-2" href="gemini-chat-history">履歴を見る</a>
+        <a class="btn btn-primary" href="gemini-chat">新規チャット</a>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(pageError))
+{
+    <div class="alert alert-danger" role="alert">@pageError</div>
+}
+
+<div class="chat-panel mb-3">
+    @if (isLoadingConversation)
+    {
+        <div class="text-center text-body-secondary py-5">履歴を読み込み中...</div>
+    }
+    else if (messages.Count == 0)
+    {
+        <div class="text-center text-body-secondary py-5">質問を入力して新しい会話を始めてください。</div>
+    }
+    else
+    {
+        @foreach (var message in messages)
+        {
+            <div class="chat-row @(message.Role == "user" ? "chat-row-user" : "chat-row-model")">
+                <div class="chat-bubble @(message.Role == "user" ? "chat-bubble-user" : "chat-bubble-model")">
+                    <div class="chat-role">@(message.Role == "user" ? "あなた" : "Gemini")</div>
+                    @if (message.Attachment is not null)
+                    {
+                        <div class="chat-attachment">📎 @message.Attachment.FileName</div>
+                    }
+                    <div class="chat-text">@message.Content</div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <label for="gemini-message" class="form-label">メッセージ</label>
+        <textarea id="gemini-message" class="form-control" rows="4"
+                  maxlength="@ChatInputPolicy.MaxLength" @bind="userMessage"
+                  placeholder="Geminiへの質問を入力してください"></textarea>
+        <div class="mt-3">
+            <label class="form-label">添付ファイル（任意）</label>
+            <InputFile class="form-control" OnChange="SelectFileAsync"
+                       accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.md" disabled="@isSending" />
+            <div class="form-text">PDF・PNG・JPEG・TXT・CSV・Markdown、1ファイル10MBまで。評価用データのみ使用してください。</div>
+            @if (selectedAttachment is not null)
+            {
+                <div class="selected-file mt-2">
+                    <span>📎 @selectedAttachment.FileName (@FormatSize(selectedAttachment.Data.LongLength))</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
+                            @onclick="ClearAttachment">解除</button>
+                </div>
+            }
+        </div>
+        <button class="btn btn-primary mt-3" @onclick="SendAsync"
+                disabled="@(isSending || isLoadingConversation)">
+            @if (isSending)
+            {
+                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                <span>回答を生成中...</span>
+            }
+            else
+            {
+                <span>送信</span>
+            }
+        </button>
+    </div>
+</div>
+
+@if (lastInputTokens.HasValue && lastOutputTokens.HasValue)
+{
+    <div class="text-body-secondary small mt-2">
+        モデル: @lastModelId ／ 直近の入力 @lastInputTokens トークン・出力 @lastOutputTokens トークン
+    </div>
+}
+
+@code {
+    [Parameter] public Guid? ConversationId { get; set; }
+
+    private readonly List<GeminiMessage> messages = [];
+    private string userMessage = "";
+    private string? pageError;
+    private string? lastModelId;
+    private int? lastInputTokens;
+    private int? lastOutputTokens;
+    private bool isSending;
+    private bool isLoadingConversation;
+    private Guid? loadedConversationId;
+    private GeminiAttachment? selectedAttachment;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ConversationId == loadedConversationId) return;
+        loadedConversationId = ConversationId;
+        messages.Clear();
+        pageError = null;
+        lastInputTokens = null;
+        lastOutputTokens = null;
+        if (!ConversationId.HasValue) return;
+
+        isLoadingConversation = true;
+        try
+        {
+            var conversation = await ConversationDao.GetConversationAsync(ConversationId.Value);
+            if (conversation is null)
+            {
+                pageError = "指定した会話は見つからないか、保存期間を過ぎて削除されています。";
+                return;
+            }
+            messages.AddRange(await ConversationDao.GetMessagesAsync(ConversationId.Value));
+        }
+        catch (Exception)
+        {
+            pageError = "会話履歴を読み込めませんでした。データベース接続を確認してください。";
+        }
+        finally
+        {
+            isLoadingConversation = false;
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        if (isSending) return;
+
+        var messageText = string.IsNullOrWhiteSpace(userMessage) && selectedAttachment is not null
+            ? "このファイルを解析してください。"
+            : userMessage;
+        if (ChatInputPolicy.Validate(messageText) is { } validationError)
+        {
+            pageError = validationError;
+            return;
+        }
+
+        isSending = true;
+        pageError = null;
+        var question = messageText.Trim();
+        var turns = messages
+            .Select(message => new GeminiChatTurn(message.Role, message.Content, message.Attachment))
+            .Append(new GeminiChatTurn("user", question, selectedAttachment))
+            .ToList();
+
+        try
+        {
+            var result = await GeminiChatService.SendAsync(turns);
+            if (!result.IsSuccess)
+            {
+                pageError = result.ErrorMessage;
+                return;
+            }
+
+            if (ConversationId.HasValue)
+            {
+                await ConversationDao.AppendExchangeAsync(
+                    ConversationId.Value, question, result.Answer!, selectedAttachment);
+                messages.Add(CreateDisplayMessage(
+                    ConversationId.Value, "user", question, selectedAttachment));
+                messages.Add(CreateDisplayMessage(ConversationId.Value, "model", result.Answer!));
+            }
+            else
+            {
+                var id = await ConversationDao.CreateWithMessagesAsync(
+                    CreateTitle(question), question, result.Answer!, selectedAttachment);
+                userMessage = "";
+                selectedAttachment = null;
+                Navigation.NavigateTo($"/gemini-chat/{id}");
+                return;
+            }
+
+            userMessage = "";
+            selectedAttachment = null;
+            lastModelId = result.ModelId;
+            lastInputTokens = result.InputTokens;
+            lastOutputTokens = result.OutputTokens;
+        }
+        catch (Exception)
+        {
+            pageError = "会話を保存できませんでした。データベース接続を確認してください。";
+        }
+        finally
+        {
+            isSending = false;
+        }
+    }
+
+    private static string CreateTitle(string text) => text.Length <= 60 ? text : $"{text[..60]}…";
+
+    private async Task SelectFileAsync(InputFileChangeEventArgs args)
+    {
+        pageError = null;
+        var file = args.File;
+        if (GeminiAttachmentPolicy.Validate(file.Name, file.Size) is { } error)
+        {
+            selectedAttachment = null;
+            pageError = error;
+            return;
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(GeminiAttachmentPolicy.MaxFileSize);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            selectedAttachment = new GeminiAttachment
+            {
+                FileName = Path.GetFileName(file.Name),
+                ContentType = GeminiAttachmentPolicy.GetContentType(file.Name),
+                Data = memory.ToArray(),
+                CreatedAt = DateTimeOffset.Now
+            };
+        }
+        catch (IOException)
+        {
+            selectedAttachment = null;
+            pageError = "添付ファイルを読み込めませんでした。10MB以内か確認してください。";
+        }
+    }
+
+    private void ClearAttachment() => selectedAttachment = null;
+
+    private static string FormatSize(long bytes) => $"{bytes / 1024d / 1024d:0.##} MB";
+
+    private static GeminiMessage CreateDisplayMessage(
+        Guid id, string role, string content, GeminiAttachment? attachment = null) =>
+        new()
+        {
+            ConversationId = id,
+            Role = role,
+            Content = content,
+            Attachment = attachment,
+            CreatedAt = DateTimeOffset.Now
+        };
+}

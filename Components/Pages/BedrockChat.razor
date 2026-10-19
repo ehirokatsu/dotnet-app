@@ -1,0 +1,90 @@
+@page "/bedrock-chat"
+@rendermode InteractiveServer
+@using OMMS.Services
+@inject BedrockChatService BedrockChatService
+
+<PageTitle>Bedrockチャット | OMMS</PageTitle>
+
+<h1>Bedrockチャット</h1>
+<p>Amazon Bedrockへ質問を送り、生成AIの回答を確認できます。</p>
+
+<div class="mb-3">
+    <label for="bedrock-message" class="form-label">質問</label>
+    <textarea id="bedrock-message"
+              class="form-control"
+              rows="5"
+              maxlength="@ChatInputPolicy.MaxLength"
+              @bind="userMessage"
+              placeholder="質問を入力してください"></textarea>
+    <div class="form-text">入力内容はこのアプリのログには記録しません。</div>
+</div>
+
+<button class="btn btn-primary mb-4" @onclick="SendAsync" disabled="@isLoading">
+    @if (isLoading)
+    {
+        <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+        <span>回答を生成中...</span>
+    }
+    else
+    {
+        <span>Bedrockに質問する</span>
+    }
+</button>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger" role="alert">@errorMessage</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(answer))
+{
+    <div class="card">
+        <div class="card-header">回答</div>
+        <div class="card-body">
+            <p class="mb-3" style="white-space: pre-wrap;">@answer</p>
+            <small class="text-body-secondary">
+                モデル: @modelId
+                @if (inputTokens.HasValue && outputTokens.HasValue)
+                {
+                    <span>／ 入力 @inputTokens トークン・出力 @outputTokens トークン</span>
+                }
+            </small>
+        </div>
+    </div>
+}
+
+@code {
+    private string userMessage = "";
+    private string? answer;
+    private string? errorMessage;
+    private string? modelId;
+    private int? inputTokens;
+    private int? outputTokens;
+    private bool isLoading;
+
+    private async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(userMessage) || isLoading)
+        {
+            return;
+        }
+
+        isLoading = true;
+        answer = null;
+        errorMessage = null;
+
+        try
+        {
+            var result = await BedrockChatService.SendAsync(userMessage);
+            answer = result.Answer;
+            errorMessage = result.ErrorMessage;
+            modelId = result.ModelId;
+            inputTokens = result.InputTokens;
+            outputTokens = result.OutputTokens;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

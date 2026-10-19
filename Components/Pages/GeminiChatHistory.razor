@@ -1,0 +1,85 @@
+@page "/gemini-chat-history"
+@rendermode InteractiveServer
+@using OMMS.Db.dao
+@using OMMS.Models
+@inject GeminiConversationDao ConversationDao
+
+<PageTitle>Geminiチャット履歴 | OMMS</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Geminiチャット履歴</h1>
+        <p class="mb-0 text-body-secondary">最終更新から3日以内の会話を表示します。</p>
+    </div>
+    <a class="btn btn-primary" href="gemini-chat">新規チャット</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+else if (isLoading)
+{
+    <p>履歴を読み込み中...</p>
+}
+else if (conversations.Count == 0)
+{
+    <div class="alert alert-light border">保存されている履歴はありません。</div>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var conversation in conversations)
+        {
+            <div class="list-group-item d-flex justify-content-between align-items-center gap-3">
+                <a class="text-decoration-none flex-grow-1" href="@($"gemini-chat/{conversation.Id}")">
+                    <div class="fw-semibold text-body">@conversation.Title</div>
+                    <small class="text-body-secondary">
+                        @conversation.UpdatedAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm")
+                        ／ @conversation.MessageCount メッセージ
+                    </small>
+                </a>
+                <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteAsync(conversation.Id)">削除</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<GeminiConversation> conversations = [];
+    private string? errorMessage;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+        try
+        {
+            conversations = await ConversationDao.GetRecentAsync();
+        }
+        catch (Exception)
+        {
+            errorMessage = "履歴を読み込めませんでした。データベース接続を確認してください。";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        try
+        {
+            await ConversationDao.DeleteAsync(id);
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            errorMessage = "履歴を削除できませんでした。";
+        }
+    }
+}
